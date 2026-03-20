@@ -151,11 +151,6 @@
   }
 
 
-  .slot-card.disabled {
-    pointer-events: none;
-    opacity: 0.28;
-  }
-
   .slot-card input:checked ~ .slot-inner {
     border-color: var(--accent);
     background: rgba(200,240,96,0.06);
@@ -389,7 +384,7 @@
   <header>
     <div class="eyebrow">// availability poll</div>
     <h1>When can you<br><span>make it?</span></h1>
-    <p class="subtitle">Pick 2 consecutive days that work for you. Results update instantly.</p>
+    <p class="subtitle">Select all the days that work for you, then submit. Results update instantly.</p>
   </header>
 
   <!-- Name -->
@@ -401,11 +396,11 @@
 
   <!-- Slots -->
   <div class="slots-section">
-    <div class="slots-label">Pick as many 2 consecutive days as you could be available — your selection must be back-to-back</div>
+    <div class="slots-label">Select all days that work for you — pick as many as you like</div>
     <div class="slots-grid" id="slots-grid">
       <!-- injected by JS -->
     </div>
-    <div class="error-msg" id="slot-error">Please select exactly 2 consecutive days.</div>
+    <div class="error-msg" id="slot-error">Please select at least one day.</div>
   </div>
 
   <button class="submit-btn" id="submit-btn">Submit availability →</button>
@@ -431,7 +426,7 @@
 
 <script>
   // ─── Configuration ───────────────────────────────────────────────────────────
-  const POLL_TITLE = "Team Offsite 2026";
+  const POLL_TITLE = "Team Offsite 2025";
 
   // Paste your Google Apps Script Web App URL here:
   const SHEETS_URL = "https://script.google.com/macros/s/AKfycbymGBOLGKtGtru6Q6Vy0zfKc4R9h-71DAsSRX8wlNrVSvetFmDP0klWH8FasDyr23G7/exec";
@@ -481,58 +476,11 @@
     grid.appendChild(label);
   });
 
-  // ─── Consecutive-2-days enforcement ──────────────────────────────────────
-  // Rule: pick exactly 2 consecutive days (adjacent in TIMESLOTS array order).
-  // Interaction logic:
-  //   • 0 checked → all enabled
-  //   • 1 checked → only direct neighbours enabled
-  //   • 2 checked → all others locked
-
-  function getCheckedIndices() {
-    return [...document.querySelectorAll('input[name="slot"]:checked')]
-      .map(el => parseInt(el.dataset.idx))
-      .sort((a, b) => a - b);
-  }
-
-  function updateSlotStates() {
-    const checked = getCheckedIndices();
-    const allInputs = [...document.querySelectorAll('input[name="slot"]')];
-
-    if (checked.length === 0) {
-      allInputs.forEach(inp => {
-        inp.disabled = false;
-        inp.closest(".slot-card").classList.remove("disabled");
-      });
-      return;
-    }
-
-    if (checked.length === 1) {
-      const only = checked[0];
-      allInputs.forEach(inp => {
-        const i = parseInt(inp.dataset.idx);
-        const allow = (i === only) || (i === only - 1) || (i === only + 1);
-        inp.disabled = !allow;
-        inp.closest(".slot-card").classList.toggle("disabled", !allow);
-      });
-      return;
-    }
-
-    if (checked.length === 2) {
-      allInputs.forEach(inp => {
-        const i = parseInt(inp.dataset.idx);
-        const isChecked = checked.includes(i);
-        inp.disabled = !isChecked;
-        inp.closest(".slot-card").classList.toggle("disabled", !isChecked);
-      });
-    }
-  }
-
+  // ─── Submit ─────────────────────────────────────────────────────
   grid.addEventListener("change", () => {
-    updateSlotStates();
     document.getElementById("slot-error").classList.remove("visible");
   });
 
-  updateSlotStates();
 
   // ─── Submit ───────────────────────────────────────────────────────────────────
   document.getElementById("submit-btn").addEventListener("click", async () => {
@@ -543,18 +491,16 @@
 
     const nameErr = document.getElementById("name-error");
     const slotErr = document.getElementById("slot-error");
-
     nameErr.classList.remove("visible");
     slotErr.classList.remove("visible");
 
     let valid = true;
     if (!name) { nameErr.classList.add("visible"); valid = false; }
-    if (checked.length !== 2) { slotErr.classList.add("visible"); valid = false; }
+    if (!checked.length) { slotErr.classList.add("visible"); valid = false; }
     if (!valid) return;
 
     const entry = { name, days: checked, ts: Date.now() };
 
-    // Check duplicate name — update locally
     const dupe = votes.findIndex(v => v.name.toLowerCase() === name.toLowerCase());
     if (dupe !== -1) { votes[dupe] = entry; }
     else { votes.push(entry); }
@@ -562,7 +508,7 @@
     saveVotes(votes);
     renderResults();
 
-    // Reset form
+    // Reset
     nameInput.value = "";
     document.querySelectorAll('input[name="slot"]').forEach(el => el.checked = false);
     document.getElementById("results-section").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -576,9 +522,8 @@
         await fetch(SHEETS_URL, {
           method: "POST",
           body: JSON.stringify(entry),
-          mode: "no-cors", // avoids CORS preflight; Apps Script doesn't return CORS headers
+          mode: "no-cors",
         });
-        // no-cors means response is opaque — we can't check res.ok, but the write succeeds
         setSyncStatus("ok", "✓ Saved to Google Sheets");
       } catch (err) {
         console.warn("Sheets sync failed:", err);
@@ -590,6 +535,7 @@
       }
     }
   });
+
 
   // ─── Results ──────────────────────────────────────────────────────────────────
   function renderResults() {
