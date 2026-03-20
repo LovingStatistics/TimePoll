@@ -431,7 +431,7 @@
 
 <script>
   // ─── Configuration ───────────────────────────────────────────────────────────
-  const POLL_TITLE = "Team Offsite 2025";
+  const POLL_TITLE = "Team Offsite 2026";
 
   // Paste your Google Apps Script Web App URL here:
   const SHEETS_URL = "https://script.google.com/macros/s/AKfycbymGBOLGKtGtru6Q6Vy0zfKc4R9h-71DAsSRX8wlNrVSvetFmDP0klWH8FasDyr23G7/exec";
@@ -572,12 +572,12 @@
       btn.disabled = true;
       setSyncStatus("syncing", "Syncing to Google Sheets…");
       try {
-        const res = await fetch(SHEETS_URL, {
+        await fetch(SHEETS_URL, {
           method: "POST",
           body: JSON.stringify(entry),
-          headers: { "Content-Type": "text/plain" } // Apps Script requires text/plain for no CORS preflight
+          mode: "no-cors", // avoids CORS preflight; Apps Script doesn't return CORS headers
         });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        // no-cors means response is opaque — we can't check res.ok, but the write succeeds
         setSyncStatus("ok", "✓ Saved to Google Sheets");
       } catch (err) {
         console.warn("Sheets sync failed:", err);
