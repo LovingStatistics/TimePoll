@@ -360,6 +360,66 @@
   .sync-status.ok      { color: var(--accent); }
   .sync-status.error   { color: var(--danger); }
 
+  /* no-avail card */
+  .no-avail-card { margin-top: 0.4rem; }
+  #no-avail-check:checked ~ .slot-inner { border-color: var(--muted); background: rgba(255,255,255,0.03); }
+  #no-avail-check:checked ~ .slot-inner .slot-check { background: var(--muted); border-color: var(--muted); color: #0e0e0e; }
+
+  /* modal */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.7);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 999;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.3s;
+  }
+  .modal-overlay.visible { opacity: 1; pointer-events: all; }
+
+  .modal-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2.5rem 2.8rem;
+    text-align: center;
+    max-width: 340px;
+    width: 90%;
+    transform: translateY(12px);
+    transition: transform 0.3s;
+  }
+  .modal-overlay.visible .modal-box { transform: translateY(0); }
+
+  .modal-icon {
+    font-size: 2rem;
+    color: var(--accent);
+    margin-bottom: 0.8rem;
+    line-height: 1;
+  }
+  .modal-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 1.6rem;
+    font-weight: 700;
+    margin-bottom: 0.4rem;
+  }
+  .modal-sub {
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-bottom: 1.4rem;
+  }
+  .modal-bar-wrap {
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .modal-bar {
+    height: 100%;
+    background: var(--accent);
+    width: 100%;
+    transform-origin: left;
+    transition: none;
+  }
+
   /* reset */
   .reset-btn {
     margin-top: 1.5rem;
@@ -400,7 +460,15 @@
     <div class="slots-grid" id="slots-grid">
       <!-- injected by JS -->
     </div>
-    <div class="error-msg" id="slot-error">Please select at least one day.</div>
+    <label class="slot-card no-avail-card" id="no-avail-card">
+      <input type="checkbox" id="no-avail-check">
+      <div class="slot-inner">
+        <div class="slot-day" style="color:var(--muted)">None of these</div>
+        <div class="slot-date">I'm not available</div>
+        <div class="slot-check">✓</div>
+      </div>
+    </label>
+    <div class="error-msg" id="slot-error">Please select at least one day or mark yourself as unavailable.</div>
   </div>
 
   <button class="submit-btn" id="submit-btn">Submit availability →</button>
@@ -424,9 +492,18 @@
 
 </div>
 
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal-box">
+    <div class="modal-icon">✓</div>
+    <div class="modal-title">Thank you!</div>
+    <div class="modal-sub">Your availability has been submitted.</div>
+    <div class="modal-bar-wrap"><div class="modal-bar" id="modal-bar"></div></div>
+  </div>
+</div>
+
 <script>
   // ─── Configuration ───────────────────────────────────────────────────────────
-  const POLL_TITLE = "Team Offsite 2025";
+  const POLL_TITLE = "Team DEV-DAYs Offsite 2026";
 
   // Paste your Google Apps Script Web App URL here:
   const SHEETS_URL = "https://script.google.com/macros/s/AKfycbymGBOLGKtGtru6Q6Vy0zfKc4R9h-71DAsSRX8wlNrVSvetFmDP0klWH8FasDyr23G7/exec";
@@ -479,6 +556,14 @@
   // ─── Submit ─────────────────────────────────────────────────────
   grid.addEventListener("change", () => {
     document.getElementById("slot-error").classList.remove("visible");
+    // Uncheck "none" if a real day is picked
+    document.getElementById("no-avail-check").checked = false;
+  });
+
+  document.getElementById("no-avail-check").addEventListener("change", () => {
+    document.getElementById("slot-error").classList.remove("visible");
+    // Uncheck all days if "none" is picked
+    document.querySelectorAll('input[name="slot"]').forEach(el => el.checked = false);
   });
 
 
@@ -496,7 +581,8 @@
 
     let valid = true;
     if (!name) { nameErr.classList.add("visible"); valid = false; }
-    if (!checked.length) { slotErr.classList.add("visible"); valid = false; }
+    const noAvail = document.getElementById('no-avail-check').checked;
+    if (!checked.length && !noAvail) { slotErr.classList.add("visible"); valid = false; }
     if (!valid) return;
 
     const entry = { name, days: checked, ts: Date.now() };
@@ -511,7 +597,8 @@
     // Reset
     nameInput.value = "";
     document.querySelectorAll('input[name="slot"]').forEach(el => el.checked = false);
-    document.getElementById("results-section").scrollIntoView({ behavior: "smooth", block: "start" });
+    document.getElementById("no-avail-check").checked = false;
+    showModal();
 
     // ── Sync to Google Sheets ──
     if (SHEETS_URL && SHEETS_URL !== "YOUR_APPS_SCRIPT_URL_HERE") {
@@ -601,6 +688,24 @@
       `;
       logEl.appendChild(entry);
     });
+  }
+
+  // ─── Thank-you modal ────────────────────────────────────────────────────
+  function showModal() {
+    const overlay = document.getElementById("modal-overlay");
+    const bar = document.getElementById("modal-bar");
+    overlay.classList.add("visible");
+    // Reset bar then animate shrink over 5s
+    bar.style.transition = "none";
+    bar.style.transform = "scaleX(1)";
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      bar.style.transition = "transform 5s linear";
+      bar.style.transform = "scaleX(0)";
+    }));
+    setTimeout(() => {
+      overlay.classList.remove("visible");
+      document.getElementById("results-section").scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 5000);
   }
 
   // ─── Sync status helper ───────────────────────────────────────────────────────
